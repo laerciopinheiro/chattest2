@@ -296,14 +296,32 @@ run_analysis <- function(paths, out_dir = "output", n_boot = 5000, seed = 123) {
   )
 }
 
+build_paths_from_base <- function(base_dir) {
+  base_dir <- normalizePath(base_dir, winslash = "/", mustWork = FALSE)
+
+  list(
+    taxas = file.path(base_dir, "Taxas_de_Mortalidade_Neonatal__0_27_dias__Brasil_x_Piau__2014_2023 (1).xlsx", fsep = "/"),
+    sem = file.path(base_dir, "28._Nascim p_resid.mãe por Ano do nascimento segundo Região_Unidade da Federação Consult pré-natal_ Nenhuma Período_ 2014-2023_______________________________________________ (1).xlsx", fsep = "/"),
+    pn_1a3 = file.path(base_dir, "27. _Nascim p_resid.mãe por Ano do nascimento segundo Região_Unidade da Federação Consult pré-natal_ De 1 a 3 consultas Período_ 2014-2023_______________________________________________ (1).xlsx", fsep = "/"),
+    pn_4a6 = file.path(base_dir, "26. _Nascim p_resid.mãe por Ano do nascimento segundo Região_Unidade da Federação Consult pré-natal_ De 4 a 6 consultas Período_ 2014-2023_______________________________________________ (1).xlsx", fsep = "/"),
+    pn_7mais = file.path(base_dir, "25. _Nascim p_resid.mãe por Ano do nascimento segundo Região_Unidade da Federação Consult pré-natal_ 7 ou mais consultas Período_ 2014-2023_______________________________________________ (1).xlsx", fsep = "/"),
+    nv_total = file.path(base_dir, "15. Nascim p_resid.mãe por Ano do nascimento segundo Região_Unidade da Federação____ Período_ 2014-2023____ (2).xlsx", fsep = "/")
+  )
+}
+
+run_analysis_with_base <- function(base_dir,
+                                   out_dir = base_dir,
+                                   n_boot = 5000,
+                                   seed = 123) {
+  paths <- build_paths_from_base(base_dir)
+  run_analysis(paths, out_dir = normalizePath(out_dir, winslash = "/", mustWork = FALSE), n_boot = n_boot, seed = seed)
+}
+
 # ====== EXEMPLO DE USO ======
-# paths <- list(
-#   taxas = "C:/caminho/para/Taxas_de_Mortalidade_Neonatal__0_27_dias__Brasil_x_Piau__2014_2023 (1).xlsx",
-#   sem = "C:/caminho/para/28._Nascim ... (1).xlsx",
-#   pn_1a3 = "C:/caminho/para/27. _Nascim ... (1).xlsx",
-#   pn_4a6 = "C:/caminho/para/26. _Nascim ... (1).xlsx",
-#   pn_7mais = "C:/caminho/para/25. _Nascim ... (1).xlsx",
-#   nv_total = "C:/caminho/para/15. Nascim ... (2).xlsx"
-# )
-# resultado <- run_analysis(paths, out_dir = "C:/Users/laerc/Desktop/Trabalho da Tolstenko", n_boot = 5000)
-# View(resultado$spearman)
+if (sys.nframe() == 0) {
+  base_dir <- "C:/Users/laerc/Desktop/Trabalho da Tolstenko"
+  resultado <- run_analysis_with_base(base_dir, out_dir = base_dir, n_boot = 5000, seed = 123)
+
+  message("Análises concluídas. Arquivos exportados para: ", normalizePath(base_dir, winslash = "/", mustWork = FALSE))
+  message("Visualize resultado$spearman para tabela consolidada.")
+}
