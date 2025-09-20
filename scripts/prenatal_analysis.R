@@ -54,7 +54,15 @@ padroniza_uf <- function(x) {
 calc_spearman_boot <- function(df, xvar, yvar, label, n_boot = 5000, seed = 123) {
   df2 <- df %>% drop_na(.data[[xvar]], .data[[yvar]])
   if (nrow(df2) < 3) {
-    return(tibble())
+    return(tibble(
+      label = label,
+      xvar = xvar,
+      rho = NA_real_,
+      p_value = NA_real_,
+      n = nrow(df2),
+      ci_low = NA_real_,
+      ci_high = NA_real_
+    ))
   }
 
   spearman <- suppressWarnings(cor.test(df2[[xvar]], df2[[yvar]], method = "spearman"))
@@ -80,9 +88,12 @@ calc_spearman_boot <- function(df, xvar, yvar, label, n_boot = 5000, seed = 123)
 }
 
 plot_spearman_scatter <- function(df, uf, xvar, xlabel, spearman_row) {
-  rho_fmt <- sprintf("%.3f", spearman_row$rho)
-  p_fmt <- format.pval(spearman_row$p_value, digits = 3, eps = .001)
-  annotation <- sprintf("ρ = %s\np = %s", rho_fmt, p_fmt)
+  annotation <- NULL
+  if (!is.null(spearman_row) && !is.na(spearman_row$rho) && !is.na(spearman_row$p_value)) {
+    rho_fmt <- sprintf("%.3f", spearman_row$rho)
+    p_fmt <- format.pval(spearman_row$p_value, digits = 3, eps = .001)
+    annotation <- sprintf("ρ = %s\np = %s", rho_fmt, p_fmt)
+  }
 
   df %>%
     filter(UF == uf) %>%
@@ -90,17 +101,23 @@ plot_spearman_scatter <- function(df, uf, xvar, xlabel, spearman_row) {
     geom_point(size = 2.5, colour = "#1f77b4") +
     geom_smooth(method = "lm", se = TRUE, colour = "#ff7f0e", fill = scales::alpha("#ff7f0e", 0.2)) +
     geom_text(aes(label = Ano), nudge_y = 0.1, size = 3) +
-    annotate(
-      "label",
-      x = -Inf,
-      y = Inf,
-      label = annotation,
-      hjust = -0.05,
-      vjust = 1.1,
-      size = 3,
-      label.size = 0,
-      fill = scales::alpha("white", 0.6)
-    ) +
+    {
+      if (!is.null(annotation)) {
+        annotate(
+          "label",
+          x = -Inf,
+          y = Inf,
+          label = annotation,
+          hjust = -0.05,
+          vjust = 1.1,
+          size = 3,
+          label.size = 0,
+          fill = scales::alpha("white", 0.6)
+        )
+      } else {
+        NULL
+      }
+    } +
     labs(
       x = xlabel,
       y = "Mortalidade 0–27 dias (por 1.000 NV)",
@@ -114,6 +131,10 @@ plot_spearman_scatter <- function(df, uf, xvar, xlabel, spearman_row) {
 }
 
 plot_dot_ci <- function(spearman_df) {
+  if (nrow(spearman_df) == 0) {
+    return(NULL)
+  }
+
   spearman_df %>%
     mutate(grupo = factor(paste(UF, label, sep = " · "), levels = rev(paste(UF, label, sep = " · ")))) %>%
     ggplot(aes(x = rho, y = grupo)) +
@@ -141,7 +162,15 @@ run_analysis <- function(paths, out_dir = "output", n_boot = 5000, seed = 123) {
     stop("Caminhos ausentes: ", paste(missing_paths, collapse = ", "))
   }
 
-  purrr::walk(paths, ~stopifnot(file.exists(.x)))
+  missing_files <- names(paths)[!file.exists(paths)]
+  if (length(missing_files) > 0) {
+    formatted <- paste0("  ", missing_files, ": ", unlist(paths[missing_files]))
+    stop(
+      "Os arquivos abaixo não foram encontrados:\n",
+      paste(formatted, collapse = "\n"),
+      call. = FALSE
+    )
+  }
   if (!dir.exists(out_dir)) {
     dir.create(out_dir, recursive = TRUE)
   }
@@ -218,23 +247,30 @@ run_analysis <- function(paths, out_dir = "output", n_boot = 5000, seed = 123) {
     }) %>%
     list_rbind()
 
-  dot_plot <- plot_dot_ci(spearman_results)
-  ggsave(
-    filename = file.path(out_dir, "spearman_dotplot.png"),
-    plot = dot_plot,
-    width = 7,
-    height = 5,
-    dpi = 300
-  )
+  valid_spearman <- spearman_results %>% filter(!is.na(rho))
+
+  dot_plot <- plot_dot_ci(valid_spearman)
+  if (!is.null(dot_plot)) {
+    ggsave(
+      filename = file.path(out_dir, "spearman_dotplot.png"),
+      plot = dot_plot,
+      width = 7,
+      height = 5,
+      dpi = 300
+    )
+  }
 
   scatter_plots <- list()
   for (uf in unique(dados_br_pi$UF)) {
     df_uf <- filter(dados_br_pi, UF == uf)
     for (i in seq_len(nrow(spearman_targets))) {
       target <- spearman_targets[i, ]
-      spearman_row <- spearman_results %>%
+      spearman_row <- valid_spearman %>%
         filter(UF == uf, xvar == target$xvar) %>%
         slice_head(n = 1)
+      if (nrow(spearman_row) == 0) {
+        next
+      }
       p <- plot_spearman_scatter(df_uf, uf, target$xvar, target$label, spearman_row)
       fname <- sprintf(
         "scatter_%s_%s.png",
@@ -269,5 +305,5 @@ run_analysis <- function(paths, out_dir = "output", n_boot = 5000, seed = 123) {
 #   pn_7mais = "C:/caminho/para/25. _Nascim ... (1).xlsx",
 #   nv_total = "C:/caminho/para/15. Nascim ... (2).xlsx"
 # )
-# resultado <- run_analysis(paths, out_dir = "resultados", n_boot = 5000)
+# resultado <- run_analysis(paths, out_dir = "C:/Users/laerc/Desktop/Trabalho da Tolstenko", n_boot = 5000)
 # View(resultado$spearman)
